@@ -1,1 +1,5 @@
-# dog_game
+# DogGame
+
+infamous dog game
+
+game with dog

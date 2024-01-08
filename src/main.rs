@@ -1,4 +1,8 @@
-use bevy::{prelude::*, asset};
+use bevy::{
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    asset,
+    prelude::*,
+};
 use bevy::render::view::window;
 use bevy::window::PrimaryWindow;
 use rand::prelude::*;
@@ -7,15 +11,13 @@ pub const PLAYER_SPEED: f32 = 500.0;
 pub const PLAYER_SIZE: f32 = 200.0; // This is the player sprite size.
 pub const NUMBER_OF_ENEMIES: usize = 1;
 
+static mut SCORE:u64 = 0;
+
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_startup_system(spawn_camera)
-        .add_startup_system(spawn_player)
-        .add_startup_system(spawn_enemy)
-        .add_system(player_movement)
-        .add_system(confine_player_movement)
-        .add_system(player_hit_enemy)
+        .add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin))
+        .add_systems(Startup, (setup, spawn_camera, spawn_player, spawn_enemy))
+        .add_systems(Update, (player_movement, confine_player_movement, player_hit_enemy, text_color_system, fps_update_system, score_update_system))
         .run();
 }
 
@@ -24,6 +26,12 @@ pub struct Player {}
 
 #[derive(Component)]
 pub struct Enemy {}
+
+#[derive(Component)]
+struct FpsText;
+
+#[derive(Component)]
+struct ScoreText;
 
 pub fn spawn_player(
     mut commands: Commands,
@@ -157,8 +165,95 @@ pub fn player_hit_enemy(
             if distance < PLAYER_SIZE / 2.0 {
                 commands.entity(enemy_entity).despawn();
                 spawn_enemy(commands, window_query, asset_server, enemy_query);
-                println!("Player hit enemy!");
+                unsafe {
+                    SCORE += 1;
+                }
             }
+        }
+    }
+}
+
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new(
+                "FPS: ",
+                TextStyle {
+                    font: asset_server.load("FiraSans-Bold.ttf"),
+                    font_size: 60.0,
+                    ..default()
+                },
+            ),
+            TextSection::from_style(
+                TextStyle {
+                    font: asset_server.load("FiraMono-Medium.ttf"),
+                    font_size: 60.0,
+                    color: Color::GOLD,
+            }),
+        ]),
+        FpsText,
+    ));
+
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new(
+                "Score: ",
+                TextStyle {
+                    font: asset_server.load("FiraSans-Bold.ttf"),
+                    font_size: 60.0,
+                    ..default()
+                },
+            ),
+            TextSection::from_style(
+                TextStyle {
+                    font: asset_server.load("FiraMono-Medium.ttf"),
+                    font_size: 60.0,
+                    color: Color::GOLD,
+            }),
+        ]).with_style(Style {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(5.0),
+            left: Val::Px(15.0),
+            ..default()
+        }),
+        ScoreText,
+    ));
+}
+
+fn text_color_system(time: Res<Time>, mut query: Query<&mut Text, With<ScoreText>>) {
+    for mut text in &mut query {
+        let seconds = time.elapsed_seconds();
+
+        // Update the color of the first and only section.
+        text.sections[0].style.color = Color::Rgba {
+            red: (1.25 * seconds).sin() / 2.0 + 0.5,
+            green: (0.75 * seconds).sin() / 2.0 + 0.5,
+            blue: (0.50 * seconds).sin() / 2.0 + 0.5,
+            alpha: 1.0,
+        };
+    }
+}
+
+fn fps_update_system(
+    diagnostics: Res<DiagnosticsStore>,
+    mut fps_query: Query<&mut Text, With<FpsText>>,
+) {
+    for mut text in &mut fps_query {
+        if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+            if let Some(value) = fps.smoothed() {
+                // Update the value of the second section
+                text.sections[1].value = format!("{value:.2}");
+            }
+        }
+    }
+}
+
+fn score_update_system(
+    mut score_query: Query<&mut Text, With<ScoreText>>,
+) {
+    for mut text in &mut score_query {
+        unsafe {
+            text.sections[1].value = format!("{value:.2}", value = SCORE);
         }
     }
 }
