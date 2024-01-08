@@ -6,19 +6,31 @@ use bevy::{
 use bevy::render::view::window;
 use bevy::window::PrimaryWindow;
 use rand::prelude::*;
+use discord_presence::{Client, Event};
 
 pub const PLAYER_SPEED: f32 = 500.0;
 pub const PLAYER_SIZE: f32 = 200.0; // This is the player sprite size.
 pub const NUMBER_OF_ENEMIES: usize = 1;
-
-static mut SCORE:u64 = 0;
+#[derive(Resource)]
+pub struct Score {
+    pub score: u64,
+}
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin))
+        .add_plugins((
+            DefaultPlugins, 
+            FrameTimeDiagnosticsPlugin,
+        ))
         .add_systems(Startup, (setup, spawn_camera, spawn_player, spawn_enemy))
-        .add_systems(Update, (player_movement, confine_player_movement, player_hit_enemy, text_color_system, fps_update_system, score_update_system))
-        .run();
+        .add_systems(Update, (
+            player_movement, 
+            confine_player_movement, 
+            player_hit_enemy, 
+            text_color_system, 
+            fps_update_system, 
+            score_update_system,
+        )).run();
 }
 
 #[derive(Component)]
@@ -155,6 +167,7 @@ pub fn player_hit_enemy(
     window_query: Query<&Window, With<PrimaryWindow>>,
     asset_server: Res<AssetServer>,
     player_query: Query<&Transform, With<Player>>,
+    mut score: ResMut<Score>,
 ) {
     if let Ok((enemy_entity, enemy_transform)) = enemy_query.get_single_mut() {
         if let Ok(player_transform) = player_query.get_single() {
@@ -165,15 +178,16 @@ pub fn player_hit_enemy(
             if distance < PLAYER_SIZE / 2.0 {
                 commands.entity(enemy_entity).despawn();
                 spawn_enemy(commands, window_query, asset_server, enemy_query);
-                unsafe {
-                    SCORE += 1;
-                }
+                score.score += 1;
             }
         }
     }
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+
+    commands.insert_resource(Score { score: 0 });
+
     commands.spawn((
         TextBundle::from_sections([
             TextSection::new(
@@ -250,10 +264,9 @@ fn fps_update_system(
 
 fn score_update_system(
     mut score_query: Query<&mut Text, With<ScoreText>>,
+    mut score: ResMut<Score>,
 ) {
     for mut text in &mut score_query {
-        unsafe {
-            text.sections[1].value = format!("{value:.2}", value = SCORE);
-        }
+        text.sections[1].value = format!("{}", score.score);
     }
 }
